@@ -1,0 +1,290 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum CategoryStatus {
+  active
+  inactive
+}
+
+enum ProductStatus {
+  active
+  inactive
+}
+
+enum CustomerStatus {
+  regular
+  member
+  inactive
+}
+
+enum SaleStatus {
+  completed
+  cancelled
+  refunded
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RETURN
+  DAMAGE
+}
+
+model Role {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique @db.VarChar(64)
+  description     String?          @db.Text
+  users           User[]
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id              Int              @id @default(autoincrement())
+  code            String           @unique @db.VarChar(120)
+  name            String           @db.VarChar(120)
+  module          String           @db.VarChar(64)
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int        @map("role_id")
+  permissionId Int        @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  name           String          @db.VarChar(120)
+  email          String          @unique @db.VarChar(160)
+  username       String          @unique @db.VarChar(80)
+  passwordHash   String          @map("password_hash") @db.VarChar(255)
+  phone          String?         @db.VarChar(40)
+  status         UserStatus      @default(active)
+  roleId         Int             @map("role_id")
+  role           Role            @relation(fields: [roleId], references: [id])
+  sales          Sale[]          @relation("CashierSales")
+  stockMovements StockMovement[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([roleId])
+  @@map("users")
+}
+
+model Store {
+  id            Int             @id @default(autoincrement())
+  name          String          @db.VarChar(160)
+  address       String?         @db.Text
+  phone         String?         @db.VarChar(40)
+  email         String?         @db.VarChar(160)
+  logo          String?         @db.VarChar(255)
+  currency      String          @default("IDR") @db.VarChar(10)
+  taxRate       Decimal         @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  receiptFooter String?         @map("receipt_footer") @db.Text
+  sales         Sale[]
+  movements     StockMovement[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@map("stores")
+}
+
+model Category {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique @db.VarChar(120)
+  color     String         @default("#005bbf") @db.VarChar(20)
+  status    CategoryStatus @default(active)
+  sortOrder Int            @default(0) @map("sort_order")
+  products  Product[]
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@map("categories")
+}
+
+model Product {
+  id            Int             @id @default(autoincrement())
+  categoryId    Int             @map("category_id")
+  category      Category        @relation(fields: [categoryId], references: [id])
+  sku           String          @unique @db.VarChar(80)
+  barcode       String?         @unique @db.VarChar(120)
+  name          String          @db.VarChar(180)
+  description   String?         @db.Text
+  unit          String          @default("pcs") @db.VarChar(30)
+  purchasePrice Decimal         @map("purchase_price") @db.Decimal(14, 2)
+  sellingPrice  Decimal         @map("selling_price") @db.Decimal(14, 2)
+  stock         Int             @default(0)
+  minimumStock  Int             @default(0) @map("minimum_stock")
+  image         String?         @db.LongText
+  status        ProductStatus   @default(active)
+  saleItems     SaleItem[]
+  movements     StockMovement[]
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@index([categoryId])
+  @@index([name])
+  @@index([stock])
+  @@map("products")
+}
+
+model Customer {
+  id        Int            @id @default(autoincrement())
+  name      String         @db.VarChar(160)
+  phone     String?        @unique @db.VarChar(40)
+  email     String?        @db.VarChar(160)
+  address   String?        @db.Text
+  notes     String?        @db.Text
+  status    CustomerStatus @default(regular)
+  points    Int            @default(0)
+  sales     Sale[]
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([status])
+  @@map("customers")
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(160)
+  phone     String?  @db.VarChar(40)
+  email     String?  @db.VarChar(160)
+  warehouse String?  @db.VarChar(160)
+  address   String?  @db.Text
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("suppliers")
+}
+
+model Sale {
+  id                  Int        @id @default(autoincrement())
+  storeId             Int        @default(1) @map("store_id")
+  store               Store      @relation(fields: [storeId], references: [id])
+  transactionNumber   String     @unique @map("transaction_number") @db.VarChar(40)
+  customerId          Int?       @map("customer_id")
+  customer            Customer?  @relation(fields: [customerId], references: [id])
+  cashierId           Int        @map("cashier_id")
+  cashier             User       @relation("CashierSales", fields: [cashierId], references: [id])
+  subtotal            Decimal    @db.Decimal(14, 2)
+  discountAmount      Decimal    @default(0.00) @map("discount_amount") @db.Decimal(14, 2)
+  pointDiscountAmount Decimal    @default(0.00) @map("point_discount_amount") @db.Decimal(14, 2)
+  redeemedPoints      Int        @default(0) @map("redeemed_points")
+  earnedPoints        Int        @default(0) @map("earned_points")
+  taxAmount           Decimal    @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  grandTotal          Decimal    @map("grand_total") @db.Decimal(14, 2)
+  paidAmount          Decimal    @map("paid_amount") @db.Decimal(14, 2)
+  changeAmount        Decimal    @default(0.00) @map("change_amount") @db.Decimal(14, 2)
+  paymentMethod       String     @map("payment_method") @db.VarChar(40)
+  status              SaleStatus @default(completed)
+  notes               String?    @db.Text
+  items               SaleItem[]
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+
+  @@index([storeId])
+  @@index([storeId, createdAt])
+  @@index([cashierId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("sales")
+}
+
+model LoyaltyRule {
+  id            Int      @id @default(1)
+  minimumSpend  Decimal  @default(100000.00) @map("minimum_spend") @db.Decimal(14, 2)
+  pointsAwarded Int      @default(1000) @map("points_awarded")
+  pointValue    Decimal  @default(1.00) @map("point_value") @db.Decimal(14, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("loyalty_rules")
+}
+
+model SaleItem {
+  id             Int     @id @default(autoincrement())
+  saleId         Int     @map("sale_id")
+  sale           Sale    @relation(fields: [saleId], references: [id])
+  productId      Int     @map("product_id")
+  product        Product @relation(fields: [productId], references: [id])
+  productName    String  @map("product_name") @db.VarChar(180)
+  qty            Int
+  price          Decimal @db.Decimal(14, 2)
+  discountAmount Decimal @default(0.00) @map("discount_amount") @db.Decimal(14, 2)
+  subtotal       Decimal @db.Decimal(14, 2)
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+model StockMovement {
+  id            Int               @id @default(autoincrement())
+  storeId       Int               @default(1) @map("store_id")
+  store         Store             @relation(fields: [storeId], references: [id])
+  productId     Int               @map("product_id")
+  product       Product           @relation(fields: [productId], references: [id])
+  type          StockMovementType
+  qty           Int
+  beforeStock   Int               @map("before_stock")
+  afterStock    Int               @map("after_stock")
+  referenceType String?           @map("reference_type") @db.VarChar(60)
+  referenceId   Int?              @map("reference_id")
+  notes         String?           @db.Text
+  createdBy     Int?              @map("created_by")
+  user          User?             @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  @@index([storeId])
+  @@index([storeId, createdAt])
+  @@index([productId])
+  @@index([createdBy])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  storeId   Int?     @default(1) @map("store_id")
+  store     Store?   @relation(fields: [storeId], references: [id])
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   @db.VarChar(120)
+  module    String   @db.VarChar(80)
+  oldData   Json?    @map("old_data")
+  newData   Json?    @map("new_data")
+  ipAddress String?  @map("ip_address") @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([storeId])
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

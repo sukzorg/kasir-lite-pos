@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: kasir-lite-pos-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: kasir_lite_pos
+      MYSQL_USER: kasir_lite
+      MYSQL_PASSWORD: kasir_lite_secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - kasir-lite-pos-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kasir-lite-pos-data:
